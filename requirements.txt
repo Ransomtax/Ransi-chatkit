@@ -1,4 +1,5 @@
 openai
+openai-agents
 openai-chatkit
 fastapi
 uvicorn
