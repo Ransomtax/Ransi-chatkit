@@ -272,22 +272,11 @@ customElements.whenDefined("openai-chatkit").then(function () {
 
     chatkit.setOptions({
         apiURL: "/chatkit",
-        theme: {
-            colorScheme: "light",
-            color: {
-                accent: {
-                    primary: "#07589B",
-                    level: 1
-                }
-            },
-            typography: {
-                fontFamily: "'Montserrat', sans-serif"
-            },
-            radius: "round"
-        },
-        startScreen: {
-            greeting: "Come posso aiutarti?"
-        }
+
+        theme: "light",
+newThreadView: {
+    greeting: "Come posso aiutarti?"
+}
     });
 
 });
