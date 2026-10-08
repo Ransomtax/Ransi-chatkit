@@ -275,7 +275,19 @@ customElements.whenDefined("openai-chatkit").then(function () {
         url: "/chatkit",
         domainKey: "domain_pk_6ac7a930b3408195912e32fca10f2f25046b504748b3b1ce"
     },
-    theme: "light",
+    theme: {
+    colorScheme: "light",
+    color: {
+        accent: {
+            primary: "#07589B",
+            level: 1
+        }
+    },
+    typography: {
+        fontFamily: "'Montserrat', sans-serif"
+    },
+    radius: "round"
+},
 startScreen: {
     greeting: "Come posso aiutarti?"
 }
