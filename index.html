@@ -268,9 +268,10 @@ openai-chatkit {
 <script>
 customElements.whenDefined("openai-chatkit").then(function () {
 
-    document.getElementById("ransi").setOptions({
-    apiURL: "/chatkit",
+    const chatkit = document.getElementById("ransi");
 
+    chatkit.setOptions({
+        apiURL: "/chatkit",
         theme: {
             colorScheme: "light",
             color: {
@@ -284,7 +285,6 @@ customElements.whenDefined("openai-chatkit").then(function () {
             },
             radius: "round"
         },
-
         startScreen: {
             greeting: "Come posso aiutarti?"
         }
