@@ -1,5 +1,6 @@
 (function () {
   if (window.__ransiWidgetStarted) return;
+  console.log("RANSI: SCRIPT ESEGUITO");
   window.__ransiWidgetStarted = true;
 
   function createRansiWidget() {
