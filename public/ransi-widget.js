@@ -77,6 +77,13 @@
 
     var wrap = document.createElement("div");
     wrap.id = "ransi-launcher-wrap";
+    wrap.style.setProperty("position", "fixed", "important");
+wrap.style.setProperty("right", "24px", "important");
+wrap.style.setProperty("bottom", "24px", "important");
+wrap.style.setProperty("z-index", "2147483647", "important");
+wrap.style.setProperty("visibility", "visible", "important");
+wrap.style.setProperty("opacity", "1", "important");
+wrap.style.setProperty("display", "flex", "important");
     wrap.innerHTML =
       '<button id="ransi-launcher" aria-label="Chiedi a Ransi">' +
       '<img src="' + avatar + '" alt="Ransi"></button>' +
@@ -98,12 +105,12 @@
 
     function openRansi() {
       chat.hidden = false;
-      wrap.style.display = "none";
+      wrap.style.setProperty("display", "none", "important");
     }
 
     function closeRansi() {
       chat.hidden = true;
-      wrap.style.display = "flex";
+      wrap.style.setProperty("display", "flex", "important");
     }
 
     document.getElementById("ransi-launcher")
