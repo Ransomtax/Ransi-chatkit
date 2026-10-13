@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
@@ -90,36 +90,6 @@ app.mount(
 )
 
 chatkit_server = RansiChatKitServer()
-
-
-@app.get("/health/db")
-async def database_health():
-    try:
-        store = chatkit_server.pg_store
-        await store.connect()
-
-        async with store.pool.acquire() as conn:
-            counts = {}
-            for table in (
-                "ransi_threads",
-                "ransi_thread_items",
-                "ransi_attachments",
-                "ransi_agent_sessions",
-            ):
-                counts[table] = await conn.fetchval(
-                    f"SELECT COUNT(*) FROM {table}"
-                )
-
-        return {
-            "database": "ok",
-            "counts": counts,
-        }
-
-    except Exception:
-        raise HTTPException(
-            status_code=503,
-            detail="Controllo PostgreSQL non riuscito",
-        )
 
 
 @app.get("/")
