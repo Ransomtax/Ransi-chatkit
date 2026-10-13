@@ -64,7 +64,7 @@ class RansiChatKitServer(ChatKitServer[dict]):
             input=text,
         ) as stream:
             for event in stream:
-                if getattr(event, "type", "") == "response.output_text.delta":
+                if getattr(event, "type", "") == "agent.session.turn.output_text.delta":
                     delta = getattr(event, "delta", "")
                     if delta:
                         full_text += delta
