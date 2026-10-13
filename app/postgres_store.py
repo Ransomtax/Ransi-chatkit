@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from uuid import uuid4
@@ -21,69 +22,25 @@ def decode_json(value):
 class PostgresStore(Store[dict]):
     def __init__(self):
         self.pool = None
+        self._connect_lock = asyncio.Lock()
 
     async def connect(self):
         if self.pool is not None:
             return
 
-        database_url = os.environ.get("DATABASE_URL")
-        if not database_url:
-            raise RuntimeError("DATABASE_URL non configurata")
+        async with self._connect_lock:
+            if self.pool is not None:
+                return
 
-        pool = await asyncpg.create_pool(
-            dsn=database_url,
-            min_size=1,
-            max_size=5,
-        )
+            database_url = os.environ.get("DATABASE_URL")
+            if not database_url:
+                raise RuntimeError("DATABASE_URL non configurata")
 
-        try:
-            async with pool.acquire() as conn:
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS ransi_threads (
-                        id TEXT PRIMARY KEY,
-                        created_at TIMESTAMPTZ NOT NULL,
-                        data JSONB NOT NULL
-                    )
-                """)
-
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS ransi_thread_items (
-                        id TEXT PRIMARY KEY,
-                        thread_id TEXT NOT NULL
-                            REFERENCES ransi_threads(id)
-                            ON DELETE CASCADE,
-                        created_at TIMESTAMPTZ NOT NULL,
-                        data JSONB NOT NULL
-                    )
-                """)
-
-                await conn.execute("""
-                    CREATE INDEX IF NOT EXISTS
-                    ransi_thread_items_thread_created_idx
-                    ON ransi_thread_items(thread_id, created_at, id)
-                """)
-
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS ransi_attachments (
-                        id TEXT PRIMARY KEY,
-                        data JSONB NOT NULL
-                    )
-                """)
-
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS ransi_agent_sessions (
-                        thread_id TEXT PRIMARY KEY
-                            REFERENCES ransi_threads(id)
-                            ON DELETE CASCADE,
-                        session_id TEXT NOT NULL
-                    )
-                """)
-
-        except Exception:
-            await pool.close()
-            raise
-
-        self.pool = pool
+            self.pool = await asyncpg.create_pool(
+                dsn=database_url,
+                min_size=1,
+                max_size=5,
+            )
 
     def generate_thread_id(self, context):
         return f"thread_{uuid4().hex}"
@@ -162,11 +119,7 @@ class PostgresStore(Store[dict]):
         ]
         next_after = selected[-1]["id"] if has_more and selected else None
 
-        return Page(
-            data=threads,
-            has_more=has_more,
-            after=next_after,
-        )
+        return Page(data=threads, has_more=has_more, after=next_after)
 
     async def load_thread_items(
         self, thread_id, after, limit, order, context
@@ -216,18 +169,12 @@ class PostgresStore(Store[dict]):
         has_more = len(rows) > limit
         selected = rows[:limit]
         items = [
-            THREAD_ITEM_ADAPTER.validate_python(
-                decode_json(row["data"])
-            )
+            THREAD_ITEM_ADAPTER.validate_python(decode_json(row["data"]))
             for row in selected
         ]
         next_after = selected[-1]["id"] if has_more and selected else None
 
-        return Page(
-            data=items,
-            has_more=has_more,
-            after=next_after,
-        )
+        return Page(data=items, has_more=has_more, after=next_after)
 
     async def add_thread_item(self, thread_id, item, context):
         await self.save_item(thread_id, item, context)
@@ -261,9 +208,7 @@ class PostgresStore(Store[dict]):
                 f"Item {item_id} not found in thread {thread_id}"
             )
 
-        return THREAD_ITEM_ADAPTER.validate_python(
-            decode_json(row["data"])
-        )
+        return THREAD_ITEM_ADAPTER.validate_python(decode_json(row["data"]))
 
     async def delete_thread(self, thread_id, context):
         await self.connect()
@@ -305,9 +250,7 @@ class PostgresStore(Store[dict]):
             )
 
         if row is None:
-            raise NotFoundError(
-                f"Attachment {attachment_id} not found"
-            )
+            raise NotFoundError(f"Attachment {attachment_id} not found")
 
         return Attachment.model_validate(decode_json(row["data"]))
 
