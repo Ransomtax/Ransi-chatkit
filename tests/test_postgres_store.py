@@ -1,6 +1,7 @@
+import os
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.postgres_store import PostgresStore
 
@@ -9,7 +10,7 @@ class TestPostgresStore(unittest.IsolatedAsyncioTestCase):
     async def test_connect_requires_database_url(self):
         store = PostgresStore()
 
-        with patch.dict("os.environ", {}, clear=True):
+        with patch.dict(os.environ, {}, clear=True):
             with self.assertRaisesRegex(
                 RuntimeError,
                 "DATABASE_URL non configurata",
@@ -32,16 +33,20 @@ class TestPostgresStore(unittest.IsolatedAsyncioTestCase):
         store.connect = AsyncMock()
 
         timestamp = datetime.now(timezone.utc)
-        fake_conn = AsyncMock()
-        fake_conn.fetchrow.return_value = {
-            "created_at": timestamp
-        }
-        fake_conn.fetch.return_value = []
 
-        fake_pool = AsyncMock()
-        fake_pool.acquire.return_value.__aenter__.return_value = fake_conn
-        fake_pool.acquire.return_value.__aexit__.return_value = False
-        store.pool = fake_pool
+        conn = MagicMock()
+        conn.fetchrow = AsyncMock(
+            return_value={"created_at": timestamp}
+        )
+        conn.fetch = AsyncMock(return_value=[])
+
+        acquire_context = MagicMock()
+        acquire_context.__aenter__ = AsyncMock(return_value=conn)
+        acquire_context.__aexit__ = AsyncMock(return_value=False)
+
+        pool = MagicMock()
+        pool.acquire.return_value = acquire_context
+        store.pool = pool
 
         page = await store.load_threads(
             limit=10,
@@ -53,8 +58,8 @@ class TestPostgresStore(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(page.data, [])
         self.assertFalse(page.has_more)
         self.assertIsNone(page.after)
-        fake_conn.fetchrow.assert_awaited_once()
-        fake_conn.fetch.assert_awaited_once()
+        conn.fetchrow.assert_awaited_once()
+        conn.fetch.assert_awaited_once()
 
 
 if __name__ == "__main__":
