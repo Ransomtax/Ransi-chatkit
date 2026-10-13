@@ -1,6 +1,6 @@
-
 import json
 import os
+from uuid import uuid4
 
 import asyncpg
 from pydantic import TypeAdapter
@@ -86,28 +86,7 @@ class PostgresStore(Store[dict]):
         self.pool = pool
 
     def generate_thread_id(self, context):
-        from uuid import uuid4
         return f"thread_{uuid4().hex}"
-
-    def _paginate(self, rows, after, limit, order, cursor_key):
-        rows = list(rows)
-
-        start = 0
-        if after:
-            for index, row in enumerate(rows):
-                if cursor_key(row) == after:
-                    start = index + 1
-                    break
-
-        data = rows[start:start + limit]
-        has_more = start + limit < len(rows)
-        next_after = cursor_key(data[-1]) if has_more and data else None
-
-        return Page(
-            data=data,
-            has_more=has_more,
-            after=next_after,
-        )
 
     async def load_thread(self, thread_id, context):
         await self.connect()
@@ -139,21 +118,54 @@ class PostgresStore(Store[dict]):
     async def load_threads(self, limit, after, order, context):
         await self.connect()
         direction = "DESC" if order == "desc" else "ASC"
+        operator = "<" if direction == "DESC" else ">"
 
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch(f"""
-                SELECT data FROM ransi_threads
-                ORDER BY created_at {direction}, id {direction}
-            """)
+            if after:
+                cursor = await conn.fetchrow("""
+                    SELECT created_at
+                    FROM ransi_threads
+                    WHERE id = $1
+                """, after)
 
+                if cursor is None:
+                    return Page(data=[], has_more=False, after=None)
+
+                rows = await conn.fetch(
+                    f"""
+                    SELECT data, id
+                    FROM ransi_threads
+                    WHERE (created_at, id) {operator} ($1, $2)
+                    ORDER BY created_at {direction}, id {direction}
+                    LIMIT $3
+                    """,
+                    cursor["created_at"],
+                    after,
+                    limit + 1,
+                )
+            else:
+                rows = await conn.fetch(
+                    f"""
+                    SELECT data, id
+                    FROM ransi_threads
+                    ORDER BY created_at {direction}, id {direction}
+                    LIMIT $1
+                    """,
+                    limit + 1,
+                )
+
+        has_more = len(rows) > limit
+        selected = rows[:limit]
         threads = [
             ThreadMetadata.model_validate(decode_json(row["data"]))
-            for row in rows
+            for row in selected
         ]
+        next_after = selected[-1]["id"] if has_more and selected else None
 
-        return self._paginate(
-            threads, after, limit, order,
-            cursor_key=lambda thread: thread.id,
+        return Page(
+            data=threads,
+            has_more=has_more,
+            after=next_after,
         )
 
     async def load_thread_items(
@@ -161,24 +173,60 @@ class PostgresStore(Store[dict]):
     ):
         await self.connect()
         direction = "DESC" if order == "desc" else "ASC"
+        operator = "<" if direction == "DESC" else ">"
 
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch(f"""
-                SELECT data FROM ransi_thread_items
-                WHERE thread_id = $1
-                ORDER BY created_at {direction}, id {direction}
-            """, thread_id)
+            if after:
+                cursor = await conn.fetchrow("""
+                    SELECT created_at
+                    FROM ransi_thread_items
+                    WHERE thread_id = $1 AND id = $2
+                """, thread_id, after)
 
+                if cursor is None:
+                    return Page(data=[], has_more=False, after=None)
+
+                rows = await conn.fetch(
+                    f"""
+                    SELECT data, id
+                    FROM ransi_thread_items
+                    WHERE thread_id = $1
+                      AND (created_at, id) {operator} ($2, $3)
+                    ORDER BY created_at {direction}, id {direction}
+                    LIMIT $4
+                    """,
+                    thread_id,
+                    cursor["created_at"],
+                    after,
+                    limit + 1,
+                )
+            else:
+                rows = await conn.fetch(
+                    f"""
+                    SELECT data, id
+                    FROM ransi_thread_items
+                    WHERE thread_id = $1
+                    ORDER BY created_at {direction}, id {direction}
+                    LIMIT $2
+                    """,
+                    thread_id,
+                    limit + 1,
+                )
+
+        has_more = len(rows) > limit
+        selected = rows[:limit]
         items = [
             THREAD_ITEM_ADAPTER.validate_python(
                 decode_json(row["data"])
             )
-            for row in rows
+            for row in selected
         ]
+        next_after = selected[-1]["id"] if has_more and selected else None
 
-        return self._paginate(
-            items, after, limit, order,
-            cursor_key=lambda item: item.id,
+        return Page(
+            data=items,
+            has_more=has_more,
+            after=next_after,
         )
 
     async def add_thread_item(self, thread_id, item, context):
