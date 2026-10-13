@@ -1,8 +1,8 @@
-
+```python
 import uuid
 from datetime import datetime
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
@@ -91,6 +91,31 @@ app.mount(
 )
 
 chatkit_server = RansiChatKitServer()
+
+
+@app.get("/health/db")
+async def database_health():
+    try:
+        await chatkit_server.pg_store.connect()
+
+        async with chatkit_server.pg_store.pool.acquire() as conn:
+            tables_exist = await conn.fetchval("""
+                SELECT
+                    to_regclass('public.ransi_threads') IS NOT NULL
+                    AND to_regclass('public.ransi_thread_items') IS NOT NULL
+                    AND to_regclass('public.ransi_agent_sessions') IS NOT NULL
+            """)
+
+        if not tables_exist:
+            raise RuntimeError("Tabelle PostgreSQL mancanti")
+
+        return {"database": "ok", "tables": "ok"}
+
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Controllo PostgreSQL non riuscito",
+        )
 
 
 @app.get("/")
