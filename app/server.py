@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
@@ -72,7 +72,7 @@ class RansiChatKitServer(ChatKitServer[dict]):
         assistant_item = AssistantMessageItem(
             id=f"msg_{uuid.uuid4().hex}",
             thread_id=thread.id,
-            created_at=datetime.now(),
+created_at=datetime.now(timezone.utc),
             content=[
                 AssistantMessageContent(text=full_text)
             ],
