@@ -95,20 +95,25 @@ chatkit_server = RansiChatKitServer()
 @app.get("/health/db")
 async def database_health():
     try:
-        await chatkit_server.pg_store.connect()
+        store = chatkit_server.pg_store
+        await store.connect()
 
-        async with chatkit_server.pg_store.pool.acquire() as conn:
-            tables_exist = await conn.fetchval("""
-                SELECT
-                    to_regclass('public.ransi_threads') IS NOT NULL
-                    AND to_regclass('public.ransi_thread_items') IS NOT NULL
-                    AND to_regclass('public.ransi_agent_sessions') IS NOT NULL
-            """)
+        async with store.pool.acquire() as conn:
+            counts = {}
+            for table in (
+                "ransi_threads",
+                "ransi_thread_items",
+                "ransi_attachments",
+                "ransi_agent_sessions",
+            ):
+                counts[table] = await conn.fetchval(
+                    f"SELECT COUNT(*) FROM {table}"
+                )
 
-        if not tables_exist:
-            raise RuntimeError("Tabelle PostgreSQL mancanti")
-
-        return {"database": "ok", "tables": "ok"}
+        return {
+            "database": "ok",
+            "counts": counts,
+        }
 
     except Exception:
         raise HTTPException(
