@@ -1,4 +1,3 @@
-```python
 import asyncio
 import os
 import unittest
@@ -66,4 +65,3 @@ class TestPostgresIntegration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-```
