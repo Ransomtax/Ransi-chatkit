@@ -4,3 +4,4 @@ openai-chatkit==1.6.5
 fastapi
 uvicorn
 asyncpg==0.32.0
+python-multipart
