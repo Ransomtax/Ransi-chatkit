@@ -212,6 +212,7 @@ openai-chatkit {
     <button class="ransi-launcher" id="ransi-launcher" aria-label="Chiedi a Ransi">
         <img src="/public/Ransi-optimized.webp" alt="Ransi">
     </button>
+
     <button class="ransi-label" id="ransi-label" type="button">
         Chiedi a Ransi
     </button>
@@ -224,10 +225,12 @@ openai-chatkit {
             src="/public/Ransi-optimized.webp"
             alt="Ransi"
         >
+
         <div class="ransi-info">
             <div class="ransi-name">Ransi</div>
             <div class="ransi-subtitle">Assistente Ransomtax</div>
         </div>
+
         <button class="ransi-close" id="ransi-close" aria-label="Chiudi">
             ×
         </button>
@@ -263,6 +266,7 @@ customElements.whenDefined("openai-chatkit").then(function () {
         startScreen: {
             greeting: "Come posso aiutarti?"
         }
+    });
 });
 </script>
 
@@ -278,6 +282,7 @@ function openRansi() {
 }
 
 launcher.addEventListener("click", openRansi);
+
 document.getElementById("ransi-label").addEventListener("click", openRansi);
 
 close.addEventListener("click", function () {
