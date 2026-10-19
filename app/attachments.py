@@ -146,14 +146,17 @@ class PostgresAttachmentStore(AttachmentStore[dict]):
                 detail="Contesto HTTP non disponibile per l'upload.",
             )
 
-        attachment_id = f"att_{uuid.uuid4().hex}"
+        attachment_id = self.generate_attachment_id(
+            input.mime_type,
+            context,
+        )
 
         upload_url = request.url_for(
             "upload_attachment",
             attachment_id=attachment_id,
         )
 
-        return FileAttachment(
+        attachment = FileAttachment(
             id=attachment_id,
             name=os.path.basename(input.name or "allegato"),
             mime_type=input.mime_type,
@@ -162,6 +165,15 @@ class PostgresAttachmentStore(AttachmentStore[dict]):
                 method="PUT",
             ),
         )
+
+        # Importante: salvare i metadati prima che il frontend
+        # invii il contenuto del file.
+        await self.metadata_store.save_attachment(
+            attachment,
+            context,
+        )
+
+        return attachment
 
     async def write_file(
         self,
@@ -189,13 +201,13 @@ class PostgresAttachmentStore(AttachmentStore[dict]):
         except NotFoundError as exc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Allegato non trovato.",
+                detail="Allegato non trovato nei metadati.",
             ) from exc
 
         if attachment.upload_descriptor is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Questo allegato è già stato caricato.",
+                detail="Il file risulta già caricato.",
             )
 
         if attachment.mime_type not in ALLOWED_CONTENT_TYPES:
@@ -243,7 +255,7 @@ class PostgresAttachmentStore(AttachmentStore[dict]):
         if stored_file is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Il contenuto del file non è disponibile.",
+                detail="Contenuto del file non disponibile.",
             )
 
         return attachment, stored_file["content"]
@@ -254,3 +266,7 @@ class PostgresAttachmentStore(AttachmentStore[dict]):
         context: dict,
     ) -> None:
         await self.content_store.delete(attachment_id)
+        await self.metadata_store.delete_attachment(
+            attachment_id,
+            context,
+        )
