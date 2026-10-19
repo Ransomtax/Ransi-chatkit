@@ -34,8 +34,6 @@ html, body {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-}
-.ransi-chat {
     --ransi-blue: #07589B;
     --ransi-gray: #575756;
 }
@@ -45,14 +43,10 @@ html, body {
     font-family: 'Montserrat', sans-serif;
 }
 
-.ransi-name {
-    color: #575756;
-}
-
+.ransi-name,
 .ransi-subtitle {
     color: #575756;
 }
-/* HEADER */
 
 .ransi-header {
     height: 82px;
@@ -80,16 +74,12 @@ html, body {
 .ransi-name {
     font-size: 18px;
     font-weight: 600;
-    color: #575756;
 }
 
 .ransi-subtitle {
     margin-top: 4px;
     font-size: 13px;
-    color: #575756;
 }
-
-/* AREA CHAT */
 
 .ransi-body {
     flex: 1;
@@ -104,8 +94,6 @@ openai-chatkit {
     height: 100%;
 }
 
-/* MOBILE */
-
 @media (max-width: 600px) {
     .ransi-chat {
         right: 10px;
@@ -116,7 +104,6 @@ openai-chatkit {
         border-radius: 18px;
     }
 }
-/* AVATAR FLOTTANTE */
 
 .ransi-launcher {
     position: relative;
@@ -130,7 +117,9 @@ openai-chatkit {
     cursor: pointer;
     z-index: 1000;
     overflow: visible;
+    animation: ransi-pulse 2s ease-in-out infinite;
 }
+
 .ransi-launcher::before {
     content: "";
     position: absolute;
@@ -158,16 +147,12 @@ openai-chatkit {
 .ransi-launcher:hover {
     transform: scale(1.04);
 }
-.ransi-launcher {
-    animation: ransi-pulse 2.0s ease-in-out infinite;
-}
 
 @keyframes ransi-pulse {
     0%, 100% {
         transform: scale(1);
         box-shadow: 0 0 14px 5px rgba(7, 88, 155, 0.45);
     }
-
     50% {
         transform: scale(1.04);
         box-shadow: 0 0 20px 7px rgba(7, 88, 155, 0.55);
@@ -182,7 +167,10 @@ openai-chatkit {
     line-height: 1;
     color: #777;
     cursor: pointer;
-} .ransi-chat[hidden] {
+}
+
+.ransi-chat[hidden],
+.ransi-launcher-wrap[hidden] {
     display: none !important;
 }
 
@@ -195,10 +183,6 @@ openai-chatkit {
     align-items: center;
     gap: 8px;
     z-index: 1000;
-}
-
-.ransi-launcher-wrap[hidden] {
-    display: none !important;
 }
 
 .ransi-launcher {
@@ -225,74 +209,74 @@ openai-chatkit {
 <body>
 
 <div class="ransi-launcher-wrap" id="ransi-launcher-wrap">
-
     <button class="ransi-launcher" id="ransi-launcher" aria-label="Chiedi a Ransi">
         <img src="/public/Ransi-optimized.webp" alt="Ransi">
     </button>
-
     <button class="ransi-label" id="ransi-label" type="button">
         Chiedi a Ransi
     </button>
-
 </div>
 
 <div class="ransi-chat" id="ransi-chat" hidden>
-
     <header class="ransi-header">
-
         <img
             class="ransi-avatar"
             src="/public/Ransi-optimized.webp"
             alt="Ransi"
         >
-
         <div class="ransi-info">
             <div class="ransi-name">Ransi</div>
-            <div class="ransi-subtitle">
-                Assistente Ransomtax
-            </div>
+            <div class="ransi-subtitle">Assistente Ransomtax</div>
         </div>
-
         <button class="ransi-close" id="ransi-close" aria-label="Chiudi">
             ×
         </button>
-
     </header>
 
     <main class="ransi-body">
         <openai-chatkit id="ransi"></openai-chatkit>
     </main>
-
 </div>
 
 <script>
 customElements.whenDefined("openai-chatkit").then(function () {
-
     const chatkit = document.getElementById("ransi");
 
     chatkit.setOptions({
-    api: {
-        url: "/chatkit",
-        domainKey: "domain_pk_6ac7a930b3408195912e32fca10f2f25046b504748b3b1ce"
-    },
-    theme: {
-    colorScheme: "light",
-    color: {
-        accent: {
-            primary: "#07589B",
-            level: 1
+        api: {
+            url: "/chatkit",
+            domainKey: "domain_pk_6ac7a930b3408195912e32fca10f2f25046b504748b3b1ce"
+        },
+        theme: {
+            colorScheme: "light",
+            color: {
+                accent: {
+                    primary: "#07589B",
+                    level: 1
+                }
+            },
+            typography: {
+                fontFamily: "'Montserrat', sans-serif"
+            },
+            radius: "round"
+        },
+        startScreen: {
+            greeting: "Come posso aiutarti?"
+        },
+        composer: {
+            attachments: {
+                enabled: true,
+                maxCount: 5,
+                maxSize: 10485760,
+                accept: {
+                    "application/pdf": [".pdf"],
+                    "image/jpeg": [".jpg", ".jpeg"],
+                    "image/png": [".png"],
+                    "text/plain": [".txt"]
+                }
+            }
         }
-    },
-    typography: {
-        fontFamily: "'Montserrat', sans-serif"
-    },
-    radius: "round"
-},
-startScreen: {
-    greeting: "Come posso aiutarti?"
-}
-});
-
+    });
 });
 </script>
 
@@ -300,7 +284,6 @@ startScreen: {
 const launcher = document.getElementById("ransi-launcher");
 const chat = document.getElementById("ransi-chat");
 const close = document.getElementById("ransi-close");
-
 const launcherWrap = document.getElementById("ransi-launcher-wrap");
 
 function openRansi() {
@@ -318,3 +301,4 @@ close.addEventListener("click", function () {
 </script>
 
 </body>
+</html>
