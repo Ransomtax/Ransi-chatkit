@@ -27,6 +27,8 @@ ENVIRONMENT = {
     "type": "openai_hosted",
 }
 
+MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024
+
 
 class RansiChatKitServer(ChatKitServer[dict]):
     def __init__(self):
@@ -117,12 +119,42 @@ async def home():
     return FileResponse("index.html")
 
 
-@app.put("/attachments/{attachment_id}/content", name="upload_attachment")
+@app.api_route(
+    "/attachments/{attachment_id}/content",
+    methods=["PUT", "POST"],
+    name="upload_attachment",
+)
 async def upload_attachment(
     attachment_id: str,
     request: Request,
 ):
-    content = await request.body()
+    content_type = request.headers.get("content-type", "").lower()
+
+    if content_type.startswith("multipart/form-data"):
+        form = await request.form()
+        uploaded_file = form.get("file")
+
+        if uploaded_file is None or not hasattr(uploaded_file, "read"):
+            raise HTTPException(
+                status_code=400,
+                detail="Il form deve contenere il campo 'file'.",
+            )
+
+        content = await uploaded_file.read(MAX_ATTACHMENT_SIZE + 1)
+    else:
+        content = await request.body()
+
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail="Contenuto del file mancante.",
+        )
+
+    if len(content) > MAX_ATTACHMENT_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail="Dimensione massima: 10 MB.",
+        )
 
     attachment = await chatkit_server.attachment_store.write_file(
         attachment_id=attachment_id,
@@ -133,7 +165,10 @@ async def upload_attachment(
     return attachment.model_dump(mode="json")
 
 
-@app.get("/attachments/{attachment_id}/content", name="download_attachment")
+@app.get(
+    "/attachments/{attachment_id}/content",
+    name="download_attachment",
+)
 async def download_attachment(
     attachment_id: str,
     request: Request,
