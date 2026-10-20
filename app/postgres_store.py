@@ -11,6 +11,7 @@ from chatkit.types import Attachment, Page, ThreadItem, ThreadMetadata
 
 
 THREAD_ITEM_ADAPTER = TypeAdapter(ThreadItem)
+ATTACHMENT_ADAPTER = TypeAdapter(Attachment)
 
 
 def decode_json(value):
@@ -64,13 +65,18 @@ class PostgresStore(Store[dict]):
         data = json.dumps(thread.model_dump(mode="json"))
 
         async with self.pool.acquire() as conn:
-            await conn.execute("""
+            await conn.execute(
+                """
                 INSERT INTO ransi_threads (id, created_at, data)
                 VALUES ($1, $2, $3::jsonb)
                 ON CONFLICT (id) DO UPDATE
                 SET created_at = EXCLUDED.created_at,
                     data = EXCLUDED.data
-            """, thread.id, thread.created_at, data)
+                """,
+                thread.id,
+                thread.created_at,
+                data,
+            )
 
     async def load_threads(self, limit, after, order, context):
         await self.connect()
@@ -79,11 +85,14 @@ class PostgresStore(Store[dict]):
 
         async with self.pool.acquire() as conn:
             if after:
-                cursor = await conn.fetchrow("""
+                cursor = await conn.fetchrow(
+                    """
                     SELECT created_at
                     FROM ransi_threads
                     WHERE id = $1
-                """, after)
+                    """,
+                    after,
+                )
 
                 if cursor is None:
                     return Page(data=[], has_more=False, after=None)
@@ -113,10 +122,12 @@ class PostgresStore(Store[dict]):
 
         has_more = len(rows) > limit
         selected = rows[:limit]
+
         threads = [
             ThreadMetadata.model_validate(decode_json(row["data"]))
             for row in selected
         ]
+
         next_after = selected[-1]["id"] if has_more and selected else None
 
         return Page(data=threads, has_more=has_more, after=next_after)
@@ -130,11 +141,15 @@ class PostgresStore(Store[dict]):
 
         async with self.pool.acquire() as conn:
             if after:
-                cursor = await conn.fetchrow("""
+                cursor = await conn.fetchrow(
+                    """
                     SELECT created_at
                     FROM ransi_thread_items
                     WHERE thread_id = $1 AND id = $2
-                """, thread_id, after)
+                    """,
+                    thread_id,
+                    after,
+                )
 
                 if cursor is None:
                     return Page(data=[], has_more=False, after=None)
@@ -168,10 +183,12 @@ class PostgresStore(Store[dict]):
 
         has_more = len(rows) > limit
         selected = rows[:limit]
+
         items = [
             THREAD_ITEM_ADAPTER.validate_python(decode_json(row["data"]))
             for row in selected
         ]
+
         next_after = selected[-1]["id"] if has_more and selected else None
 
         return Page(data=items, has_more=has_more, after=next_after)
@@ -184,7 +201,8 @@ class PostgresStore(Store[dict]):
         data = json.dumps(item.model_dump(mode="json"))
 
         async with self.pool.acquire() as conn:
-            await conn.execute("""
+            await conn.execute(
+                """
                 INSERT INTO ransi_thread_items
                     (id, thread_id, created_at, data)
                 VALUES ($1, $2, $3, $4::jsonb)
@@ -192,16 +210,25 @@ class PostgresStore(Store[dict]):
                     thread_id = EXCLUDED.thread_id,
                     created_at = EXCLUDED.created_at,
                     data = EXCLUDED.data
-            """, item.id, thread_id, item.created_at, data)
+                """,
+                item.id,
+                thread_id,
+                item.created_at,
+                data,
+            )
 
     async def load_item(self, thread_id, item_id, context):
         await self.connect()
 
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow("""
+            row = await conn.fetchrow(
+                """
                 SELECT data FROM ransi_thread_items
                 WHERE thread_id = $1 AND id = $2
-            """, thread_id, item_id)
+                """,
+                thread_id,
+                item_id,
+            )
 
         if row is None:
             raise NotFoundError(
@@ -223,22 +250,30 @@ class PostgresStore(Store[dict]):
         await self.connect()
 
         async with self.pool.acquire() as conn:
-            await conn.execute("""
+            await conn.execute(
+                """
                 DELETE FROM ransi_thread_items
                 WHERE thread_id = $1 AND id = $2
-            """, thread_id, item_id)
+                """,
+                thread_id,
+                item_id,
+            )
 
     async def save_attachment(self, attachment, context):
         await self.connect()
         data = json.dumps(attachment.model_dump(mode="json"))
 
         async with self.pool.acquire() as conn:
-            await conn.execute("""
+            await conn.execute(
+                """
                 INSERT INTO ransi_attachments (id, data)
                 VALUES ($1, $2::jsonb)
                 ON CONFLICT (id) DO UPDATE
                 SET data = EXCLUDED.data
-            """, attachment.id, data)
+                """,
+                attachment.id,
+                data,
+            )
 
     async def load_attachment(self, attachment_id, context):
         await self.connect()
@@ -250,9 +285,13 @@ class PostgresStore(Store[dict]):
             )
 
         if row is None:
-            raise NotFoundError(f"Attachment {attachment_id} not found")
+            raise NotFoundError(
+                f"Attachment {attachment_id} not found"
+            )
 
-        return Attachment.model_validate(decode_json(row["data"]))
+        return ATTACHMENT_ADAPTER.validate_python(
+            decode_json(row["data"])
+        )
 
     async def delete_attachment(self, attachment_id, context):
         await self.connect()
@@ -267,19 +306,26 @@ class PostgresStore(Store[dict]):
         await self.connect()
 
         async with self.pool.acquire() as conn:
-            return await conn.fetchval("""
+            return await conn.fetchval(
+                """
                 SELECT session_id
                 FROM ransi_agent_sessions
                 WHERE thread_id = $1
-            """, thread_id)
+                """,
+                thread_id,
+            )
 
     async def save_agent_session_id(self, thread_id, session_id):
         await self.connect()
 
         async with self.pool.acquire() as conn:
-            await conn.execute("""
+            await conn.execute(
+                """
                 INSERT INTO ransi_agent_sessions (thread_id, session_id)
                 VALUES ($1, $2)
                 ON CONFLICT (thread_id) DO UPDATE
                 SET session_id = EXCLUDED.session_id
-            """, thread_id, session_id)
+                """,
+                thread_id,
+                session_id,
+            )
