@@ -1,5 +1,6 @@
 import os
 import uuid
+import inspect
 
 import asyncpg
 from fastapi import HTTPException, status
@@ -11,6 +12,31 @@ from chatkit.types import (
     AttachmentCreateParams,
     AttachmentUploadDescriptor,
     FileAttachment,
+)
+
+
+# DIAGNOSTICA TEMPORANEA: verifica le API effettive di ChatKit.
+print(
+    "SCHEMA AttachmentCreateParams:",
+    AttachmentCreateParams.model_json_schema(),
+    flush=True,
+)
+
+print(
+    "FIRMA create_attachment:",
+    inspect.signature(AttachmentStore.create_attachment),
+    flush=True,
+)
+
+print(
+    "METODI AttachmentStore:",
+    [
+        name
+        for name in dir(AttachmentStore)
+        if "attachment" in name.lower()
+        or "file" in name.lower()
+    ],
+    flush=True,
 )
 
 
@@ -161,13 +187,12 @@ class PostgresAttachmentStore(AttachmentStore[dict]):
             name=os.path.basename(input.name or "allegato"),
             mime_type=input.mime_type,
             upload_descriptor=AttachmentUploadDescriptor(
-                url=upload_url,
+                url=str(upload_url),
                 method="PUT",
             ),
         )
 
-        # Importante: salvare i metadati prima che il frontend
-        # invii il contenuto del file.
+        # Salva i metadati prima del caricamento del contenuto.
         await self.metadata_store.save_attachment(
             attachment,
             context,
@@ -266,6 +291,7 @@ class PostgresAttachmentStore(AttachmentStore[dict]):
         context: dict,
     ) -> None:
         await self.content_store.delete(attachment_id)
+
         await self.metadata_store.delete_attachment(
             attachment_id,
             context,
