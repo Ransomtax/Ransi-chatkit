@@ -1,3 +1,4 @@
+import io
 import os
 import uuid
 from datetime import datetime, timezone
@@ -6,6 +7,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
+from pypdf import PdfReader
 
 from chatkit.server import ChatKitServer, StreamingResult
 from chatkit.types import (
@@ -21,11 +23,13 @@ from app.attachments import (
     PostgresAttachmentStore,
 )
 
+
 print(
     "SCHEMA AttachmentUploadDescriptor:",
     AttachmentUploadDescriptor.model_json_schema(),
     flush=True,
 )
+
 
 AGENT_ID = "agent_7f94abb9ebf748da8b9674ea898a7fec80023bc7fe4b4a7cba"
 
@@ -196,6 +200,87 @@ async def download_attachment(
             ),
         },
     )
+
+
+@app.get("/attachments/{attachment_id}/text")
+async def extract_attachment_text(
+    attachment_id: str,
+    request: Request,
+):
+    # Recupera l'allegato già caricato.
+    attachment, content = (
+        await chatkit_server.attachment_store.read_file(
+            attachment_id=attachment_id,
+            context={"request": request},
+        )
+    )
+
+    mime_type = attachment.mime_type.lower()
+
+    # Estrazione del testo dai file TXT.
+    if mime_type == "text/plain":
+        try:
+            extracted_text = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            extracted_text = content.decode(
+                "cp1252",
+                errors="replace",
+            )
+
+        page_count = None
+
+    # Estrazione del testo dai PDF.
+    elif mime_type == "application/pdf":
+        try:
+            reader = PdfReader(io.BytesIO(content))
+
+            if reader.is_encrypted:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Il PDF è protetto da password.",
+                )
+
+            page_texts = [
+                page.extract_text() or ""
+                for page in reader.pages
+            ]
+
+            extracted_text = "\n\n".join(page_texts)
+            page_count = len(reader.pages)
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Impossibile leggere il PDF.",
+            ) from exc
+
+    else:
+        raise HTTPException(
+            status_code=415,
+            detail="Sono supportati soltanto file TXT e PDF.",
+        )
+
+    has_text = bool(extracted_text.strip())
+
+    return {
+        "filename": attachment.name,
+        "mime_type": attachment.mime_type,
+        "page_count": page_count,
+        "character_count": len(extracted_text),
+        "text_extracted": has_text,
+        "text": extracted_text,
+        "message": (
+            "Testo estratto correttamente."
+            if has_text
+            else (
+                "Non è stato trovato testo. "
+                "Il PDF potrebbe essere una scansione "
+                "e richiedere OCR."
+            )
+        ),
+    }
 
 
 @app.post("/chatkit")
