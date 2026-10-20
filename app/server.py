@@ -12,6 +12,7 @@ from chatkit.types import (
     AssistantMessageContent,
     AssistantMessageItem,
     ThreadItemDoneEvent,
+    AttachmentUploadDescriptor,
 )
 
 from app.postgres_store import PostgresStore
@@ -20,6 +21,11 @@ from app.attachments import (
     PostgresAttachmentStore,
 )
 
+print(
+    "SCHEMA AttachmentUploadDescriptor:",
+    AttachmentUploadDescriptor.model_json_schema(),
+    flush=True,
+)
 
 AGENT_ID = "agent_7f94abb9ebf748da8b9674ea898a7fec80023bc7fe4b4a7cba"
 
