@@ -1,5 +1,5 @@
-import io
 import os
+import io
 import uuid
 from datetime import datetime, timezone
 
@@ -23,14 +23,6 @@ from app.attachments import (
     PostgresAttachmentStore,
 )
 
-
-print(
-    "SCHEMA AttachmentUploadDescriptor:",
-    AttachmentUploadDescriptor.model_json_schema(),
-    flush=True,
-)
-
-
 AGENT_ID = "agent_7f94abb9ebf748da8b9674ea898a7fec80023bc7fe4b4a7cba"
 
 ENVIRONMENT = {
@@ -38,6 +30,48 @@ ENVIRONMENT = {
 }
 
 MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024
+
+
+def extract_text(content: bytes, mime_type: str) -> tuple[str, int | None]:
+    """Estrae localmente il testo dai file TXT e PDF."""
+
+    mime_type = mime_type.lower().split(";")[0].strip()
+
+    if mime_type == "text/plain":
+        try:
+            return content.decode("utf-8-sig"), None
+        except UnicodeDecodeError:
+            return content.decode("cp1252", errors="replace"), None
+
+    if mime_type == "application/pdf":
+        try:
+            reader = PdfReader(io.BytesIO(content))
+
+            if reader.is_encrypted:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Il PDF è protetto da password.",
+                )
+
+            page_texts = [
+                page.extract_text() or ""
+                for page in reader.pages
+            ]
+
+            return "\n\n".join(page_texts), len(reader.pages)
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Impossibile leggere il PDF.",
+            ) from exc
+
+    raise HTTPException(
+        status_code=415,
+        detail="Sono supportati soltanto file TXT e PDF.",
+    )
 
 
 class RansiChatKitServer(ChatKitServer[dict]):
@@ -64,11 +98,67 @@ class RansiChatKitServer(ChatKitServer[dict]):
         if input_user_message is None:
             return
 
+        # Recupera il testo digitato dall'utente.
         text = "".join(
             content.text
             for content in input_user_message.content
             if hasattr(content, "text")
         )
+
+        # Recupera e legge gli allegati associati al messaggio.
+        attachment_sections = []
+
+        for attachment in input_user_message.attachments:
+            mime_type = attachment.mime_type.lower().split(";")[0].strip()
+
+            if mime_type not in (
+                "text/plain",
+                "application/pdf",
+            ):
+                attachment_sections.append(
+                    f"[Allegato non elaborato: {attachment.name}. "
+                    f"Tipo non supportato: {attachment.mime_type}]"
+                )
+                continue
+
+            _, file_content = await self.attachment_store.read_file(
+                attachment_id=attachment.id,
+                context=context,
+            )
+
+            extracted_text, page_count = extract_text(
+                file_content,
+                mime_type,
+            )
+
+            if extracted_text.strip():
+                attachment_sections.append(
+                    f"CONTENUTO DELL'ALLEGATO: {attachment.name}\n"
+                    f"Tipo: {mime_type}\n"
+                    + (
+                        f"Pagine: {page_count}\n"
+                        if page_count is not None
+                        else ""
+                    )
+                    + "--- INIZIO TESTO ESTRATTO ---\n"
+                    f"{extracted_text}\n"
+                    "--- FINE TESTO ESTRATTO ---"
+                )
+            else:
+                attachment_sections.append(
+                    f"L'allegato {attachment.name} non contiene testo "
+                    "estraibile. Se è un PDF scansionato, occorre OCR."
+                )
+
+        # Aggiunge il contenuto dei file al messaggio da inviare all'Agent.
+        if attachment_sections:
+            text += (
+                "\n\n"
+                "L'utente ha allegato i seguenti documenti. "
+                "Usa il testo estratto come contesto per rispondere "
+                "alla sua richiesta.\n\n"
+                + "\n\n".join(attachment_sections)
+            )
 
         session_id = await self.pg_store.get_agent_session_id(thread.id)
 
@@ -207,7 +297,6 @@ async def extract_attachment_text(
     attachment_id: str,
     request: Request,
 ):
-    # Recupera l'allegato già caricato.
     attachment, content = (
         await chatkit_server.attachment_store.read_file(
             attachment_id=attachment_id,
@@ -215,52 +304,10 @@ async def extract_attachment_text(
         )
     )
 
-    mime_type = attachment.mime_type.lower()
-
-    # Estrazione del testo dai file TXT.
-    if mime_type == "text/plain":
-        try:
-            extracted_text = content.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            extracted_text = content.decode(
-                "cp1252",
-                errors="replace",
-            )
-
-        page_count = None
-
-    # Estrazione del testo dai PDF.
-    elif mime_type == "application/pdf":
-        try:
-            reader = PdfReader(io.BytesIO(content))
-
-            if reader.is_encrypted:
-                raise HTTPException(
-                    status_code=422,
-                    detail="Il PDF è protetto da password.",
-                )
-
-            page_texts = [
-                page.extract_text() or ""
-                for page in reader.pages
-            ]
-
-            extracted_text = "\n\n".join(page_texts)
-            page_count = len(reader.pages)
-
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise HTTPException(
-                status_code=422,
-                detail="Impossibile leggere il PDF.",
-            ) from exc
-
-    else:
-        raise HTTPException(
-            status_code=415,
-            detail="Sono supportati soltanto file TXT e PDF.",
-        )
+    extracted_text, page_count = extract_text(
+        content,
+        attachment.mime_type,
+    )
 
     has_text = bool(extracted_text.strip())
 
@@ -276,8 +323,7 @@ async def extract_attachment_text(
             if has_text
             else (
                 "Non è stato trovato testo. "
-                "Il PDF potrebbe essere una scansione "
-                "e richiedere OCR."
+                "Il PDF potrebbe essere una scansione e richiedere OCR."
             )
         ),
     }
